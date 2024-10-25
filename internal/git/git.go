@@ -1,7 +1,6 @@
 package git
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,17 +25,35 @@ func (g *Git) IsRepository() bool {
 	return false
 }
 
-// IsCleanWorkingTree 检查工作区是否干净
+// IsCleanWorkingTree 检查工作区是否干净（未跟踪或已修改但未暂存的文件）
 func (g *Git) IsCleanWorkingTree() (bool, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
+	// 使用 git status --porcelain=v1 检查工作区状态
+	cmd := exec.Command("git", "status", "--porcelain=v1")
 	cmd.Dir = g.workDir
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("执行 git status 失败: %w", err)
 	}
 
-	// 如果输出为空，说明工作区是干净的
-	return len(bytes.TrimSpace(output)) == 0, nil
+	// 检查每一行的状态
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
+		return true, nil
+	}
+
+	for _, line := range lines {
+		if len(line) < 2 {
+			continue
+		}
+		// 检查工作区状态（第二列）
+		// 如果有未暂存的修改（M）或未跟踪的文件（?），则工作区不干净
+		workTreeStatus := line[1:2]
+		if workTreeStatus == "M" || workTreeStatus == "?" {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 // GetStagedDiff 获取暂存区的差异
